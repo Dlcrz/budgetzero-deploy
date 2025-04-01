@@ -86,6 +86,7 @@ app.on('ready', async () => {
 })
 
 // Exit cleanly on request from parent process in development mode.
+// This is only necessary for development mode, otherwise you should not use this.
 if (isDevelopment) {
   if (process.platform === 'win32') {
     process.on('message', data => {

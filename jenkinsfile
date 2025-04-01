@@ -1,0 +1,59 @@
+pipeline {
+    agent { label 'controller' }
+    environment {
+        IMAGE_NAME = "mi-aplicacion-java"
+        IMAGE_TAG = "latest"
+        DOCKERFILE_PATH = "Dockerfile"
+        DOCKER_CREDS = credentials('az-container-creds')
+        ACR_REGISTRY = "jenkinsdevregistryec.azurecr.io"
+        APP_NAME = "myapp"
+        PORT = "3000"
+     }
+ 
+
+    stages {
+        stage('Compilar con Maven') {
+            agent {
+                docker { image 'maven:3.8.4-openjdk-17-slim' }
+            }
+            steps {
+                sh 'mvn clean package'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
+            }
+        }
+
+       
+
+        stage('Build Image') {
+             steps {
+                 copyArtifacts filter: 'target/*.jar',
+                               fingerprintArtifacts: true,
+                               projectName: '${JOB_NAME}',
+                               flatten: true,
+                               selector: specific('${BUILD_NUMBER}'),
+                               target: 'target'
+                 sh "docker build -t ${ACR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -f ${DOCKERFILE_PATH} ."
+             }
+         }
+ 
+        stage('Publish Image') {
+            steps {
+                script {
+                    sh 'docker login ${ACR_REGISTRY} -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}'
+                    sh 'docker tag ${ACR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${ACR_REGISTRY}/${IMAGE_NAME}:$BUILD_NUMBER'
+                    sh 'docker push ${ACR_REGISTRY}/${IMAGE_NAME}:$BUILD_NUMBER'
+                    sh 'docker logout'
+                }
+            }
+        }
+
+    }
+    post {
+        success {
+            echo 'La compilación y las pruebas fueron exitosas.'
+        }
+        failure {
+            echo 'Hubo un error en la compilación o las pruebas.'
+        }
+    }
+}
